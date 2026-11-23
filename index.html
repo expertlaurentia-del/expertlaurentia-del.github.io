@@ -606,7 +606,7 @@ footer [data-visits-wrap].off{display:none}
 .pf-info{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;color:var(--txt)}
 .pf-info .bi{color:var(--blue);width:18px;height:18px}
 .hero h1 .pf-kicker{color:var(--blue);opacity:.95}
-@media(max-width:560px){body .hero{padding-top:100px}.pf-mob{display:block!important}.hero .portrait{width:min(250px,66vw)}.hero .portrait .float-chip{display:none}}
+@media(max-width:560px){body .hero{padding-top:100px}.pf-mob{display:block!important}.hero .portrait{width:min(250px,66vw)}.hero .portrait{margin-bottom:92px}.hero .portrait .float-chip{display:block;top:calc(100% + 30px);bottom:auto;width:106px;padding:8px 10px;font-size:11.5px;animation:none;text-align:center}.hero .portrait .float-chip b{font-size:17px}.hero .portrait .fc1{left:-52px;right:auto}.hero .portrait .fc2{left:50%;right:auto;transform:translateX(-50%)}.hero .portrait .fc3{right:-52px;left:auto}}
 @media(max-width:560px){.pf-infos{flex-direction:column;align-items:center;width:100%;gap:6px}.pf-info{font-size:13.5px}}
 @media(max-width:640px){.visits .vw{display:none}}
 </style>
@@ -1312,21 +1312,30 @@ if(v){ if(IMG.novaposter) v.poster=IMG.novaposter;
   var vo=('IntersectionObserver' in window)?new IntersectionObserver(function(es){ if(es[0].isIntersecting && window.__VID){ v.src=window.__VID; vo.disconnect(); } },{rootMargin:'400px'}):null;
   if(vo) vo.observe(v); else if(window.__VID) v.src=window.__VID; }
 
-/* visits — compteur de visites (Abacus, sans compte, sans cookie) */
-var VISITS_NS='laurent-portfolio-ia', VISITS_KEY='visites';
-var VISITS_BASE=52;   /* la 1re vraie visite affiche 53 */
+/* visits — compteur de visites : 2 services sans compte (CountAPI + VisitorBadge), sans cookie */
+var VISITS_KEY='laurentportfolioiavisites';
+var VISITS_BASE=53;   /* point de départ : 53 + chaque nouveau visiteur */
 (function(){
   var els=document.querySelectorAll('[data-visits]'); if(!els.length) return;
-  var api='https://abacus.jasoncameron.dev/';
-  function show(n){ els.forEach(function(e){ e.textContent=(VISITS_BASE+n).toLocaleString('fr-FR'); });
+  var last=0; try{ last=parseInt(localStorage.getItem('pf_visits_n')||'0',10)||0; }catch(_){}
+  function show(n){ if(n<last) n=last; last=n; try{ localStorage.setItem('pf_visits_n',String(n)); }catch(_){}
+    els.forEach(function(e){ e.textContent=(VISITS_BASE+n).toLocaleString('fr-FR'); });
     document.querySelectorAll('[data-visits-wrap]').forEach(function(w){ w.classList.remove('off'); }); }
-  function call(action){ return fetch(api+action+'/'+VISITS_NS+'/'+VISITS_KEY,{cache:'no-store'})
-    .then(function(r){ if(r.status===404) return {value:0}; if(!r.ok) throw 0; return r.json(); }); }
+  show(last);
+  function req(u){ var c=('AbortController' in window)?new AbortController():null; var t=setTimeout(function(){ c&&c.abort(); },7000);
+    return fetch(u,c?{cache:'no-store',signal:c.signal}:{cache:'no-store'}).then(function(r){ clearTimeout(t); return r; }); }
   var local=/^(file:|http:\/\/(localhost|127\.0\.0\.1))/.test(location.href);   /* ouvert sur l'ordinateur : on affiche sans compter */
-  var seen=false; try{ seen=!!sessionStorage.getItem('pf_seen'); }catch(_){}
-  var first=(local||seen)?call('get'):call('hit').catch(function(){ return call('get'); });
-  first.then(function(d){ var n=parseInt(d&&d.value,10); if(!isNaN(n)){ show(Math.max(n,1)); try{ sessionStorage.setItem('pf_seen','1'); }catch(_){} } })
-       .catch(function(){ show(1); /* service injoignable : on affiche le point de départ */ });
+  var seen=false; try{ seen=!!sessionStorage.getItem('pf_seen_v3'); }catch(_){}
+  var hit=!(local||seen);
+  var badge=hit ? req('https://api.visitorbadge.io/api/visitors?path='+VISITS_KEY).then(function(r){ return r.text(); })
+      .then(function(t){ var m=t.match(/VISITORS:\s*([\d\s., ]+)/); if(!m) throw 0; return parseInt(m[1].replace(/\D/g,''),10); }) : Promise.reject(0);
+  badge.catch(function(){});
+  req('https://countapi.mileshilliard.com/api/v1/'+(hit?'hit/':'get/')+VISITS_KEY)
+    .then(function(r){ if(r.status===404) return {value:0}; if(!r.ok) throw 0; return r.json(); })
+    .then(function(d){ var n=parseInt(d&&d.value,10); if(isNaN(n)) throw 0; return n; })
+    .catch(function(){ return badge; })
+    .then(function(n){ show(n); if(hit){ try{ sessionStorage.setItem('pf_seen_v3','1'); }catch(_){} } })
+    .catch(function(){ /* aucun service joignable : on garde le dernier chiffre affiché */ });
 })();
 
 /* ================= ICONS (images fournies) ================= */
